@@ -1,0 +1,27 @@
+{
+  "name": "ai-receptionist",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AI phone receptionist demo for restaurants: Vapi voice agent, Express webhook, Supabase storage, shareable demo page and owner dashboard.",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "create-assistant": "tsx src/create-assistant.ts",
+    "build:web": "esbuild web/vapi-entry.js --bundle --minify --format=iife --outfile=public/vapi-web.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "tsx": "^4.19.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.0",
+    "@vapi-ai/web": "3.1.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.5.0"
+  }
+}

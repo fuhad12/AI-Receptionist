@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Talk to the AI receptionist</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --tx:#14161a; --mu:#6b7280; --bd:#e3e6eb; --ac:#2563eb; --bad:#dc2626; --ok:#16a34a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1115; --card:#171a20; --tx:#e8eaee; --mu:#9aa3b2; --bd:#2a2f38; --ac:#5b8def; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; padding:20px;
+         font:16px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--tx); }
+  .card { width:100%; max-width:440px; background:var(--card); border:1px solid var(--bd); border-radius:16px; padding:28px; text-align:center; }
+  h1 { font-size:22px; margin:0 0 6px; }
+  p { margin:0 0 14px; color:var(--mu); }
+  .orb { width:96px; height:96px; border-radius:50%; margin:18px auto; background:var(--ac); opacity:.25; transition:transform .12s, opacity .2s; }
+  .orb.live { opacity:.9; }
+  #status { min-height:24px; font-weight:600; margin-bottom:14px; }
+  button { font:inherit; font-weight:600; border:0; border-radius:10px; padding:12px 22px; cursor:pointer; background:var(--ac); color:#fff; }
+  button.secondary { background:transparent; color:var(--tx); border:1px solid var(--bd); }
+  button:disabled { opacity:.5; cursor:default; }
+  .row { display:flex; gap:10px; justify-content:center; }
+  .hint { font-size:14px; margin-top:18px; }
+  .small { font-size:12px; margin-top:16px; }
+  #err { color:var(--bad); font-size:14px; margin-top:12px; min-height:20px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1 id="title">AI receptionist demo</h1>
+  <p>Talk to the AI receptionist and see how it handles a real call.</p>
+  <div class="orb" id="orb"></div>
+  <div id="status">Loading...</div>
+  <div class="row">
+    <button id="start" disabled>Start call</button>
+    <button id="mute" class="secondary" hidden>Mute</button>
+    <button id="stop" class="secondary" hidden>End call</button>
+  </div>
+  <div id="err"></div>
+  <p class="hint">Try: "I'd like a table for four this Friday at 7pm" or "What time do you close?"</p>
+  <p class="small">This is an AI assistant. Your microphone is used for the call, and calls may be recorded.</p>
+</div>
+
+<script src="/static/vapi-web.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const slug = location.pathname.split("/").filter(Boolean).pop();
+let vapi = null, cfg = null;
+
+const setStatus = (t) => { $("status").textContent = t; };
+const setErr = (t) => { $("err").textContent = t || ""; };
+const showCall = (on) => {
+  $("start").hidden = on; $("mute").hidden = !on; $("stop").hidden = !on;
+  $("orb").classList.toggle("live", on);
+};
+
+// Today's date and time in the restaurant's own timezone, so "tomorrow" and "Friday" resolve correctly
+function nowLocal(tz) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit",
+  }).format(new Date());
+}
+
+async function init() {
+  try {
+    const r = await fetch("/api/demo/" + encodeURIComponent(slug));
+    if (!r.ok) throw new Error("not found");
+    cfg = await r.json();
+    document.title = "Talk to the receptionist at " + cfg.name;
+    $("title").textContent = cfg.name;
+    setStatus("Ready when you are");
+    $("start").disabled = false;
+  } catch {
+    setStatus("This demo link is not available.");
+  }
+}
+
+$("start").onclick = async () => {
+  setErr("");
+  $("start").disabled = true;
+  setStatus("Connecting...");
+  try {
+    const Vapi = window.Vapi;
+    vapi = new Vapi(cfg.publicKey);
+    vapi.on("call-start", () => { showCall(true); setStatus("Listening..."); });
+    vapi.on("call-end", () => { showCall(false); $("start").disabled = false; setStatus("Call ended. Start again any time."); });
+    vapi.on("speech-start", () => setStatus("Receptionist is speaking..."));
+    vapi.on("speech-end", () => setStatus("Listening..."));
+    vapi.on("volume-level", (v) => { $("orb").style.transform = "scale(" + (1 + Math.min(v, 1) * 0.5) + ")"; });
+    vapi.on("error", (e) => {
+      console.error(e);
+      setErr("Something went wrong. Check that your microphone is allowed and try again.");
+      showCall(false); $("start").disabled = false; setStatus("Ready when you are");
+    });
+    await vapi.start(cfg.assistantId, { variableValues: { now_local: nowLocal(cfg.timezone) } });
+  } catch (e) {
+    console.error(e);
+    setErr("Could not start the call. Please allow microphone access and try again.");
+    $("start").disabled = false; setStatus("Ready when you are");
+  }
+};
+
+$("mute").onclick = () => {
+  const m = !vapi.isMuted();
+  vapi.setMuted(m);
+  $("mute").textContent = m ? "Unmute" : "Mute";
+};
+$("stop").onclick = () => vapi.stop();
+
+init();
+</script>
+</body>
+</html>

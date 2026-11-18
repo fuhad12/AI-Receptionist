@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Receptionist dashboard</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --tx:#14161a; --mu:#6b7280; --bd:#e3e6eb; --ac:#2563eb; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1115; --card:#171a20; --tx:#e8eaee; --mu:#9aa3b2; --bd:#2a2f38; --ac:#5b8def; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0 auto; max-width:1100px; padding:20px; font:14px system-ui, -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--tx); }
+  h1 { font-size:20px; margin:0 0 14px; }
+  h2 { font-size:15px; margin:0 0 10px; }
+  .card { background:var(--card); border:1px solid var(--bd); border-radius:10px; padding:16px; margin-bottom:16px; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  input, select { padding:8px; border:1px solid var(--bd); border-radius:6px; background:var(--bg); color:var(--tx); font:inherit; }
+  button { background:var(--ac); color:#fff; border:0; border-radius:6px; padding:8px 14px; font:inherit; cursor:pointer; }
+  button.sm { padding:4px 10px; font-size:12px; }
+  .tw { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:8px; border-bottom:1px solid var(--bd); vertical-align:top; }
+  th { color:var(--mu); font-weight:500; font-size:12px; white-space:nowrap; }
+  td.wrap { min-width:220px; max-width:420px; }
+  .mu { color:var(--mu); }
+  a { color:var(--ac); }
+</style>
+</head>
+<body>
+<h1>Receptionist dashboard</h1>
+
+<div class="card" id="login">
+  <div class="row">
+    <input id="key" type="password" placeholder="Admin key" style="max-width:320px">
+    <button id="unlock">Unlock</button>
+    <span id="loginErr" class="mu"></span>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <div class="card row">
+    <label for="biz" class="mu">Business</label>
+    <select id="biz"><option value="">All</option></select>
+    <span class="mu" id="updated"></span>
+  </div>
+  <div class="card"><h2>Reservations</h2><div class="tw"><table>
+    <thead><tr><th>Business</th><th>Guest</th><th>Phone</th><th>Guests</th><th>When</th><th>Notes</th></tr></thead>
+    <tbody id="reservations"></tbody></table></div></div>
+  <div class="card"><h2>Messages</h2><div class="tw"><table>
+    <thead><tr><th>Business</th><th>From</th><th>Phone</th><th>Message</th><th>Received</th></tr></thead>
+    <tbody id="messages"></tbody></table></div></div>
+  <div class="card"><h2>Calls</h2><div class="tw"><table>
+    <thead><tr><th>Business</th><th>Summary</th><th>Length</th><th>Ended</th><th>Recording</th><th>Time</th></tr></thead>
+    <tbody id="calls"></tbody></table></div></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let KEY = sessionStorage.getItem("adminKey") || "";
+
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const fmt = (iso) => new Date(iso).toLocaleString();
+
+async function api(path) {
+  const r = await fetch(path, { headers: { "x-admin-key": KEY } });
+  if (r.status === 401) { sessionStorage.removeItem("adminKey"); KEY = ""; location.reload(); return null; }
+  return r.ok ? r.json() : [];
+}
+
+function rows(id, items, render, cols) {
+  $(id).innerHTML = items.length ? items.map(render).join("") : `<tr><td colspan="${cols}" class="mu">Nothing yet</td></tr>`;
+}
+
+async function load() {
+  const b = $("biz").value;
+  const q = b ? "?b=" + encodeURIComponent(b) : "";
+  const [res, msg, calls] = await Promise.all([api("/api/reservations" + q), api("/api/messages" + q), api("/api/calls" + q)]);
+  if (!res) return;
+  rows("reservations", res, (r) => `<tr><td>${esc(r.business_slug)}</td><td><b>${esc(r.guest_name)}</b></td><td>${esc(r.phone)}</td><td>${esc(r.guests)}</td><td>${esc(r.reserve_date)} ${esc(r.reserve_time)}</td><td class="wrap">${esc(r.notes || "")}</td></tr>`, 6);
+  rows("messages", msg, (m) => `<tr><td>${esc(m.business_slug)}</td><td>${esc(m.caller_name || "")}</td><td>${esc(m.phone)}</td><td class="wrap">${esc(m.message)}</td><td>${esc(fmt(m.created_at))}</td></tr>`, 5);
+  rows("calls", calls, (c) => {
+    const text = c.summary || (c.transcript ? c.transcript.slice(0, 200) + (c.transcript.length > 200 ? "..." : "") : "");
+    const listen = c.vapi_call_id ? `<button class="sm" data-call="${esc(c.vapi_call_id)}">Listen</button>` : "";
+    return `<tr><td>${esc(c.business_slug)}</td><td class="wrap">${esc(text)}</td><td>${esc(c.duration_seconds ?? 0)}s</td><td>${esc(c.ended_reason || "")}</td><td>${listen}</td><td>${esc(fmt(c.created_at))}</td></tr>`;
+  }, 6);
+  $("updated").textContent = "Updated " + new Date().toLocaleTimeString();
+}
+
+async function start() {
+  if (!KEY) return;
+  const list = await api("/api/businesses");
+  if (!list) return;
+  $("login").hidden = true; $("app").hidden = false;
+  $("biz").innerHTML = '<option value="">All</option>' + list.map((x) => `<option value="${esc(x.slug)}">${esc(x.name)}</option>`).join("");
+  $("biz").onchange = load;
+  await load();
+  setInterval(load, 15000);
+}
+
+// Recordings live in Vapi's private storage: ask the server for a fresh short-lived link
+$("calls").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-call]");
+  if (!b) return;
+  const w = window.open("", "_blank"); // open now so the popup blocker allows it
+  b.disabled = true;
+  try {
+    const r = await fetch("/api/calls/" + encodeURIComponent(b.dataset.call) + "/recording", { headers: { "x-admin-key": KEY } });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.url) { if (w) w.location.href = j.url; else location.href = j.url; }
+    else { if (w) w.close(); alert(j.error || "Recording not available"); }
+  } catch {
+    if (w) w.close();
+    alert("Could not load the recording.");
+  }
+  b.disabled = false;
+});
+
+$("unlock").onclick = () => { KEY = $("key").value.trim(); sessionStorage.setItem("adminKey", KEY); start(); };
+$("key").addEventListener("keydown", (e) => { if (e.key === "Enter") $("unlock").click(); });
+start();
+</script>
+</body>
+</html>

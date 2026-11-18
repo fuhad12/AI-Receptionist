@@ -1,0 +1,10 @@
+{
+  "business_name": "The Harbor Table",
+  "business_description": "a family-run Mediterranean seafood restaurant",
+  "address": "12 Harbor Street",
+  "hours": "Tuesday to Sunday, 11am to 10pm. Closed on Mondays.",
+  "menu": "Grilled octopus, seafood paella, lemon herb branzino, mezze platters, vegetarian moussaka, baklava.",
+  "policies": "Reservations for up to 8 guests. Walk-ins welcome when tables are free. Free parking behind the building. Takeout available during opening hours.",
+  "max_party": "8",
+  "timezone": "America/New_York"
+}
