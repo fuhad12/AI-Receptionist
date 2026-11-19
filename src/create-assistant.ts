@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { ROOT, readStore, writeStore, slugOk } from "./store.js";
+import { ROOT, getBusiness, saveBusiness, legacyAssistantId, slugOk } from "./store.js";
 
 // Usage:
 //   npm run create-assistant -- businesses/the-harbor-table.json
@@ -107,8 +107,8 @@ const assistant = {
   silenceTimeoutSeconds: 20,
 };
 
-const store = readStore();
-const existing = forceNew ? undefined : store[slug]?.id;
+// Re-use the existing assistant for this business if there is one (Supabase first, then the old local file)
+const existing = forceNew ? undefined : ((await getBusiness(slug))?.id ?? legacyAssistantId(slug));
 const res = await fetch(existing ? `${API}/assistant/${existing}` : `${API}/assistant`, {
   method: existing ? "PATCH" : "POST",
   headers: { Authorization: `Bearer ${VAPI_API_KEY}`, "Content-Type": "application/json" },
@@ -121,8 +121,13 @@ if (!res.ok || !body.id) {
   process.exit(1);
 }
 
-store[slug] = { id: body.id, name: cfg.business_name, timezone: cfg.timezone, updatedAt: new Date().toISOString() };
-writeStore(store);
+try {
+  await saveBusiness({ slug, id: body.id, name: cfg.business_name, timezone: cfg.timezone });
+} catch (e: any) {
+  console.error(`The assistant was ${existing ? "updated" : "created"} (id ${body.id}), but saving it to Supabase failed: ${e.message}`);
+  console.error('Did you run the "businesses" table block from schema.sql in the Supabase SQL editor?');
+  process.exit(1);
+}
 
 console.log(`${existing ? "Updated" : "Created"} assistant ${body.id} for ${cfg.business_name}`);
 console.log(`Demo link:  ${PUBLIC_URL}/demo/${slug}`);

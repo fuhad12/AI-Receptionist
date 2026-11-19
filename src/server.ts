@@ -1,13 +1,13 @@
 import "dotenv/config";
 import express, { type NextFunction, type Request, type Response } from "express";
-import { createClient } from "@supabase/supabase-js";
 import { join } from "node:path";
 import { timingSafeEqual } from "node:crypto";
-import { ROOT, readStore, slugOk } from "./store.js";
+import { db } from "./db.js";
+import { ROOT, getBusiness, listBusinesses, slugOk } from "./store.js";
 
 // ---------- config ----------
 const env = process.env;
-const required = ["SUPABASE_URL", "SUPABASE_SERVICE_KEY", "WEBHOOK_SECRET", "ADMIN_KEY", "VAPI_PUBLIC_KEY"] as const;
+const required = ["WEBHOOK_SECRET", "ADMIN_KEY", "VAPI_PUBLIC_KEY"] as const;
 const missing = required.filter((k) => !env[k]);
 if (missing.length) {
   console.error(`Missing in .env: ${missing.join(", ")}`);
@@ -18,7 +18,6 @@ const ADMIN_KEY = env.ADMIN_KEY!;
 const PORT = Number(env.PORT ?? 3000);
 const VAPI_API_KEY = env.VAPI_API_KEY; // private key, only used to fetch recordings
 const VAPI_API = env.VAPI_API_URL ?? "https://api.vapi.ai";
-const db = createClient(env.SUPABASE_URL!, env.SUPABASE_SERVICE_KEY!);
 
 const safeEqual = (a: string, b: string) => {
   const x = Buffer.from(a), y = Buffer.from(b);
@@ -90,7 +89,7 @@ async function bookReservation(slug: string, callId: string | undefined, a: Reco
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) {
     return "I need an exact calendar date. Ask the caller to confirm the day.";
   }
-  const tz = readStore()[slug]?.timezone ?? "UTC";
+  const tz = (await getBusiness(slug))?.timezone ?? "UTC";
   if (date < todayIn(tz)) return "That date has already passed. Ask the caller for a future date.";
 
   const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(a.time ?? ""));
@@ -120,7 +119,7 @@ async function bookReservation(slug: string, callId: string | undefined, a: Reco
     return "The booking could not be saved. Tell the caller the team will confirm shortly.";
   }
   if (!error) {
-    const biz = readStore()[slug]?.name ?? slug;
+    const biz = (await getBusiness(slug))?.name ?? slug;
     void notifyOwner(
       `New reservation at ${biz}: ${name}, ${guests} guests, ${date} ${time}`,
       [`Name: ${name}`, `Phone: ${phone}`, `Guests: ${guests}`, `When: ${date} at ${time}`, `Notes: ${notes ?? "-"}`].join("\n"),
@@ -147,7 +146,7 @@ async function takeMessage(slug: string, callId: string | undefined, a: Record<s
     console.error("message insert failed:", error);
     return "The message could not be saved. Tell the caller the team will be in touch.";
   }
-  const biz = readStore()[slug]?.name ?? slug;
+  const biz = (await getBusiness(slug))?.name ?? slug;
   void notifyOwner(`New message at ${biz} from ${caller ?? "a caller"}`, `Name: ${caller ?? "-"}\nPhone: ${phone}\n\n${message}`);
   return "Message saved. Tell the caller the team will call them back.";
 }
@@ -211,13 +210,13 @@ app.post("/vapi", async (req: Request, res: Response) => {
 });
 
 // Shareable demo page: /demo/<slug>
-app.get("/demo/:slug", (req, res) => {
-  if (!slugOk(req.params.slug) || !readStore()[req.params.slug]) return res.status(404).send("Demo not found");
+app.get("/demo/:slug", async (req, res) => {
+  if (!slugOk(req.params.slug) || !(await getBusiness(req.params.slug))) return res.status(404).send("Demo not found");
   res.sendFile(join(ROOT, "public", "demo.html"));
 });
 
-app.get("/api/demo/:slug", (req, res) => {
-  const biz = slugOk(req.params.slug) ? readStore()[req.params.slug] : undefined;
+app.get("/api/demo/:slug", async (req, res) => {
+  const biz = slugOk(req.params.slug) ? await getBusiness(req.params.slug) : null;
   if (!biz) return res.status(404).json({ error: "not found" });
   res.json({ name: biz.name, assistantId: biz.id, timezone: biz.timezone, publicKey: env.VAPI_PUBLIC_KEY });
 });
@@ -240,9 +239,9 @@ app.get("/api/:table(reservations|messages|calls)", admin, async (req, res) => {
   res.json(data);
 });
 
-app.get("/api/businesses", admin, (_req, res) =>
-  res.json(Object.entries(readStore()).map(([slug, v]) => ({ slug, name: v.name }))),
-);
+app.get("/api/businesses", admin, async (_req, res) => {
+  res.json(await listBusinesses());
+});
 
 // Vapi keeps call recordings in private storage, so the links in webhooks can't be opened directly.
 // This asks Vapi for a fresh short-lived link when you click "Listen" on the dashboard.
