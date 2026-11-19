@@ -240,7 +240,7 @@ app.get("/api/:table(reservations|messages|calls)", admin, async (req, res) => {
 });
 
 app.get("/api/businesses", admin, async (_req, res) => {
-  res.json(await listBusinesses());
+  res.json((await listBusinesses()).map((b) => ({ slug: b.slug, name: b.name })));
 });
 
 // Vapi keeps call recordings in private storage, so the links in webhooks can't be opened directly.
@@ -271,4 +271,4 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: "server error" });
 });
 
-app.listen(PORT, () => console.log(`AI receptionist server running on port ${PORT}`));
+app.listen(PORT, "0.0.0.0", () => console.log(`AI receptionist server running on port ${PORT}`));
