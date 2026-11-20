@@ -1,0 +1,12 @@
+{
+  "type": "estate_agent",
+  "business_name": "Harlow & Reed Estates",
+  "business_description": "an independent estate and letting agency covering south Manchester",
+  "address": "14 Lapwing Lane, Chorlton, Manchester M21 9AB",
+  "hours": "Monday to Friday, 9am to 5:30pm. Saturday, 9am to 4pm. Closed on Sundays.",
+  "areas": "Chorlton, Didsbury, Withington, Fallowfield and Sale.",
+  "services": "Property sales, lettings, free valuations and property management.",
+  "listings": "3-bed semi-detached house in Chorlton, offers over £325,000. 2-bed apartment in Didsbury, £1,150 per month. 4-bed detached house in Sale, offers over £485,000. 1-bed flat in Withington, £850 per month.",
+  "policies": "Viewings are by appointment and confirmed by the team. Valuations are free and without obligation. Fees and availability are confirmed by an agent, not over the phone.",
+  "timezone": "Europe/London"
+}
