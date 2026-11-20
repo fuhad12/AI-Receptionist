@@ -58,7 +58,7 @@ const showCall = (on) => {
 
 // Today's date and time in the restaurant's own timezone, so "tomorrow" and "Friday" resolve correctly
 function nowLocal(tz) {
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("en-GB", {
     timeZone: tz, weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit",
   }).format(new Date());
 }
